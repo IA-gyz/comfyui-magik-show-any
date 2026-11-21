@@ -3,7 +3,6 @@ import { app } from "../../../scripts/app.js";
 const fonts = ["monospace", "sans-serif", "serif", "Arial", "Verdana", "Georgia", "Courier New"];
 const MIN_NODE_W = 200;
 const MAX_NODE_W = 720;
-const MAX_NODE_H = 560;
 const MIN_DISPLAY_H = 24;
 const PAD = 10;
 const MARGIN = 10;
@@ -46,17 +45,13 @@ app.registerExtension({
                     probe.value = text;
                     Object.assign(probe.style, {position:"absolute", visibility:"hidden", left:"-9999px", top:"0", width:`${nodeW - CHROME_W}px`, height:"2px", boxSizing:"border-box", border:"1px solid transparent", padding:`${PAD}px`, resize:"none", fontFamily:fontFamily, fontSize:`${fontSize}px`, whiteSpace:"pre-wrap", overflowWrap:"break-word"});
                     document.body.appendChild(probe);
-                    contentH = clamp(probe.scrollHeight + 4, MIN_DISPLAY_H, MAX_NODE_H);
+                    contentH = Math.max(MIN_DISPLAY_H, probe.scrollHeight + 4);
                     probe.remove();
                 } else {
                     contentH = MIN_DISPLAY_H;
                 }
-                let nodeH = node.computeSize ? node.computeSize([nodeW, 0])[1] : contentH + 120;
-                if (nodeH > MAX_NODE_H) {
-                    contentH = Math.max(MIN_DISPLAY_H, contentH - (nodeH - MAX_NODE_H));
-                    nodeH = node.computeSize ? node.computeSize([nodeW, 0])[1] : contentH + 120;
-                }
-                node.setSize([nodeW, Math.min(MAX_NODE_H, nodeH)]);
+                const nodeH = node.computeSize ? node.computeSize([nodeW, 0])[1] : contentH + 120;
+                node.setSize([nodeW, nodeH]);
                 node.setDirtyCanvas?.(true, true);
             };
             const font = node.addWidget("combo", "Font", node.properties.magikFont || "monospace", value => {node.properties.magikFont = value; apply(); fit();}, {values:fonts});
@@ -66,7 +61,7 @@ app.registerExtension({
             font.options.serialize = false;
             size.options.serialize = false;
             autofit.options.serialize = false;
-            const display = node.addDOMWidget("display", "customtext", area, {serialize:false, hideOnZoom:false, getMinHeight:() => contentH, getMaxHeight:() => MAX_NODE_H});
+            const display = node.addDOMWidget("display", "customtext", area, {serialize:false, hideOnZoom:false, getMinHeight:() => contentH});
             display.computeSize = width => [width, contentH];
             node.magikShowText = text => {area.value = text; apply(); fit();};
             const configured = node.onConfigure;
