@@ -27,9 +27,7 @@ app.registerExtension({
                 area.style.fontSize = `${Math.max(1, Math.min(128, Number(node.properties.magikSize) || 16))}px`;
                 node.setDirtyCanvas?.(true, true);
             };
-            let displayH = MIN_DISPLAY_H;
             let contentH = MIN_DISPLAY_H;
-            const setDisplayH = h => {displayH = h; display.computedHeight = h;};
             const fit = () => {
                 const text = area.value;
                 const fontSize = Math.max(1, Math.min(128, Number(node.properties.magikSize) || 16));
@@ -52,11 +50,9 @@ app.registerExtension({
                 } else {
                     contentH = MIN_DISPLAY_H;
                 }
-                setDisplayH(contentH);
                 let nodeH = node.computeSize ? node.computeSize([nodeW, 0])[1] : contentH + 120;
                 if (nodeH > MAX_NODE_H) {
                     contentH = Math.max(MIN_DISPLAY_H, contentH - (nodeH - MAX_NODE_H));
-                    setDisplayH(contentH);
                     nodeH = node.computeSize ? node.computeSize([nodeW, 0])[1] : contentH + 120;
                 }
                 node.setSize([nodeW, Math.min(MAX_NODE_H, nodeH)]);
@@ -67,8 +63,8 @@ app.registerExtension({
             // These are frontend-only controls, never backend inputs.
             font.options.serialize = false;
             size.options.serialize = false;
-            const display = node.addDOMWidget("display", "customtext", area, {serialize:false, hideOnZoom:false, getMinHeight:() => displayH, getMaxHeight:() => MAX_NODE_H});
-            display.computeSize = width => [width, displayH];
+            const display = node.addDOMWidget("display", "customtext", area, {serialize:false, hideOnZoom:false, getMinHeight:() => contentH, getMaxHeight:() => MAX_NODE_H});
+            display.computeSize = width => [width, contentH];
             node.magikShowText = text => {area.value = text; apply(); fit();};
             const configured = node.onConfigure;
             node.onConfigure = function (...args) {
@@ -97,14 +93,6 @@ app.registerExtension({
                 close.onclick = () => dialog.close();
                 dialog.addEventListener("close", () => dialog.remove(), {once:true});
             });
-            const resized = node.onResize;
-            node.onResize = function (size) {
-                const result = resized?.call(this, size);
-                const chrome = node.computeSize ? node.computeSize([size[0], 0])[1] - displayH : 120;
-                setDisplayH(clamp(size[1] - chrome, contentH, MAX_NODE_H));
-                node.setDirtyCanvas?.(true, true);
-                return result;
-            };
             fit();
             return result;
         };
