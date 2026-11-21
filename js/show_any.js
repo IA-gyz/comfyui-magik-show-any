@@ -1,6 +1,14 @@
 import { app } from "../../../scripts/app.js";
 
 const fonts = ["monospace", "sans-serif", "serif", "Arial", "Verdana", "Georgia", "Courier New"];
+const MIN_NODE_W = 200;
+const MAX_NODE_W = 720;
+const MAX_NODE_H = 560;
+const MIN_DISPLAY_H = 48;
+const PAD = 10;
+const CHROME_W = 2 * PAD + 12;
+const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
+const measureCtx = document.createElement("canvas").getContext("2d");
 app.registerExtension({
     name: "Magik.ShowAny",
     async beforeRegisterNodeDef(nodeType, nodeData) {
@@ -13,26 +21,58 @@ app.registerExtension({
             const area = document.createElement("textarea");
             area.readOnly = true;
             area.placeholder = "Run the workflow to inspect a value";
-            Object.assign(area.style, {width:"100%", height:"100%", resize:"none", boxSizing:"border-box", background:"#151820", color:"#eee", border:"1px solid #424858", padding:"10px"});
+            Object.assign(area.style, {width:"100%", height:"100%", resize:"none", boxSizing:"border-box", background:"#151820", color:"#eee", border:"1px solid #424858", padding:"10px", whiteSpace:"pre-wrap", overflowWrap:"break-word"});
             const apply = () => {
                 area.style.fontFamily = node.properties.magikFont || "monospace";
                 area.style.fontSize = `${Math.max(1, Math.min(128, Number(node.properties.magikSize) || 16))}px`;
                 node.setDirtyCanvas?.(true, true);
             };
-            const font = node.addWidget("combo", "Font", node.properties.magikFont || "monospace", value => {node.properties.magikFont = value; apply();}, {values:fonts});
-            const size = node.addWidget("number", "Font size", node.properties.magikSize || 16, value => {node.properties.magikSize = Math.max(1, Math.min(128, Math.round(value))); apply();}, {min:1,max:128,step:1,precision:0});
+            let displayH = MIN_DISPLAY_H;
+            const fit = () => {
+                const text = area.value;
+                const fontSize = Math.max(1, Math.min(128, Number(node.properties.magikSize) || 16));
+                const fontFamily = node.properties.magikFont || "monospace";
+                let nodeW = MIN_NODE_W;
+                if (text) {
+                    let maxLine = 0;
+                    if (measureCtx) {
+                        measureCtx.font = `${fontSize}px ${fontFamily}`;
+                        for (const line of text.split("\n")) maxLine = Math.max(maxLine, measureCtx.measureText(line).width);
+                    }
+                    nodeW = clamp(Math.ceil(maxLine) + CHROME_W, MIN_NODE_W, MAX_NODE_W);
+                    const probe = document.createElement("textarea");
+                    probe.readOnly = true;
+                    probe.value = text;
+                    Object.assign(probe.style, {position:"absolute", visibility:"hidden", left:"-9999px", top:"0", width:`${nodeW - CHROME_W}px`, height:"2px", boxSizing:"border-box", border:"1px solid transparent", padding:`${PAD}px`, resize:"none", fontFamily:fontFamily, fontSize:`${fontSize}px`, whiteSpace:"pre-wrap", overflowWrap:"break-word"});
+                    document.body.appendChild(probe);
+                    displayH = clamp(probe.scrollHeight + 4, MIN_DISPLAY_H, MAX_NODE_H);
+                    probe.remove();
+                } else {
+                    displayH = MIN_DISPLAY_H;
+                }
+                let nodeH = node.computeSize ? node.computeSize([nodeW, 0])[1] : displayH + 120;
+                if (nodeH > MAX_NODE_H) {
+                    displayH = Math.max(MIN_DISPLAY_H, displayH - (nodeH - MAX_NODE_H));
+                    nodeH = node.computeSize ? node.computeSize([nodeW, 0])[1] : displayH + 120;
+                }
+                node.setSize([nodeW, Math.min(MAX_NODE_H, nodeH)]);
+                node.setDirtyCanvas?.(true, true);
+            };
+            const font = node.addWidget("combo", "Font", node.properties.magikFont || "monospace", value => {node.properties.magikFont = value; apply(); fit();}, {values:fonts});
+            const size = node.addWidget("number", "Font size", node.properties.magikSize || 16, value => {node.properties.magikSize = Math.max(1, Math.min(128, Math.round(value))); apply(); fit();}, {min:1,max:128,step:1,precision:0});
             // These are frontend-only controls, never backend inputs.
             font.options.serialize = false;
             size.options.serialize = false;
             const display = node.addDOMWidget("display", "customtext", area, {serialize:false, hideOnZoom:false});
-            display.computeSize = width => [width, 220];
-            node.magikShowText = text => {area.value = text; apply();};
+            display.computeSize = width => [width, displayH];
+            node.magikShowText = text => {area.value = text; apply(); fit();};
             const configured = node.onConfigure;
             node.onConfigure = function (...args) {
                 const result = configured?.apply(this, args);
                 font.value = node.properties.magikFont || "monospace";
                 size.value = node.properties.magikSize || 16;
                 apply();
+                fit();
                 return result;
             };
             area.addEventListener("dblclick", () => {
@@ -53,7 +93,7 @@ app.registerExtension({
                 close.onclick = () => dialog.close();
                 dialog.addEventListener("close", () => dialog.remove(), {once:true});
             });
-            node.setSize([420, 330]); apply();
+            fit();
             return result;
         };
         const executed = nodeType.prototype.onExecuted;
