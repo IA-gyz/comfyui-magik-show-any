@@ -29,6 +29,7 @@ app.registerExtension({
             };
             let contentH = MIN_DISPLAY_H;
             const fit = () => {
+                if (node.properties.magikAutofit === false) return;
                 const text = area.value;
                 const fontSize = Math.max(1, Math.min(128, Number(node.properties.magikSize) || 16));
                 const fontFamily = node.properties.magikFont || "monospace";
@@ -60,9 +61,11 @@ app.registerExtension({
             };
             const font = node.addWidget("combo", "Font", node.properties.magikFont || "monospace", value => {node.properties.magikFont = value; apply(); fit();}, {values:fonts});
             const size = node.addWidget("number", "Font size", node.properties.magikSize || 16, value => {node.properties.magikSize = Math.max(1, Math.min(128, Math.round(value))); apply(); fit();}, {min:1,max:128,step:1,precision:0});
+            const autofit = node.addWidget("toggle", "node autofit", node.properties.magikAutofit !== false, value => {node.properties.magikAutofit = value; fit();});
             // These are frontend-only controls, never backend inputs.
             font.options.serialize = false;
             size.options.serialize = false;
+            autofit.options.serialize = false;
             const display = node.addDOMWidget("display", "customtext", area, {serialize:false, hideOnZoom:false, getMinHeight:() => contentH, getMaxHeight:() => MAX_NODE_H});
             display.computeSize = width => [width, contentH];
             node.magikShowText = text => {area.value = text; apply(); fit();};
@@ -71,6 +74,7 @@ app.registerExtension({
                 const result = configured?.apply(this, args);
                 font.value = node.properties.magikFont || "monospace";
                 size.value = node.properties.magikSize || 16;
+                autofit.value = node.properties.magikAutofit !== false;
                 apply();
                 fit();
                 return result;
