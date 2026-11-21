@@ -4,9 +4,10 @@ const fonts = ["monospace", "sans-serif", "serif", "Arial", "Verdana", "Georgia"
 const MIN_NODE_W = 200;
 const MAX_NODE_W = 720;
 const MAX_NODE_H = 560;
-const MIN_DISPLAY_H = 48;
+const MIN_DISPLAY_H = 24;
 const PAD = 10;
-const CHROME_W = 2 * PAD + 12;
+const MARGIN = 10;
+const CHROME_W = 2 * PAD + 2 + 2 * MARGIN;
 const clamp = (value, lo, hi) => Math.max(lo, Math.min(hi, value));
 const measureCtx = document.createElement("canvas").getContext("2d");
 app.registerExtension({
@@ -20,7 +21,6 @@ app.registerExtension({
             node.properties ??= {};
             const area = document.createElement("textarea");
             area.readOnly = true;
-            area.placeholder = "Run the workflow to inspect a value";
             Object.assign(area.style, {width:"100%", height:"100%", resize:"none", boxSizing:"border-box", background:"#151820", color:"#eee", border:"1px solid #424858", padding:"10px", whiteSpace:"pre-wrap", overflowWrap:"break-word"});
             const apply = () => {
                 area.style.fontFamily = node.properties.magikFont || "monospace";
@@ -28,6 +28,8 @@ app.registerExtension({
                 node.setDirtyCanvas?.(true, true);
             };
             let displayH = MIN_DISPLAY_H;
+            let contentH = MIN_DISPLAY_H;
+            const setDisplayH = h => {displayH = h; display.computedHeight = h;};
             const fit = () => {
                 const text = area.value;
                 const fontSize = Math.max(1, Math.min(128, Number(node.properties.magikSize) || 16));
@@ -45,15 +47,17 @@ app.registerExtension({
                     probe.value = text;
                     Object.assign(probe.style, {position:"absolute", visibility:"hidden", left:"-9999px", top:"0", width:`${nodeW - CHROME_W}px`, height:"2px", boxSizing:"border-box", border:"1px solid transparent", padding:`${PAD}px`, resize:"none", fontFamily:fontFamily, fontSize:`${fontSize}px`, whiteSpace:"pre-wrap", overflowWrap:"break-word"});
                     document.body.appendChild(probe);
-                    displayH = clamp(probe.scrollHeight + 4, MIN_DISPLAY_H, MAX_NODE_H);
+                    contentH = clamp(probe.scrollHeight + 4, MIN_DISPLAY_H, MAX_NODE_H);
                     probe.remove();
                 } else {
-                    displayH = MIN_DISPLAY_H;
+                    contentH = MIN_DISPLAY_H;
                 }
-                let nodeH = node.computeSize ? node.computeSize([nodeW, 0])[1] : displayH + 120;
+                setDisplayH(contentH);
+                let nodeH = node.computeSize ? node.computeSize([nodeW, 0])[1] : contentH + 120;
                 if (nodeH > MAX_NODE_H) {
-                    displayH = Math.max(MIN_DISPLAY_H, displayH - (nodeH - MAX_NODE_H));
-                    nodeH = node.computeSize ? node.computeSize([nodeW, 0])[1] : displayH + 120;
+                    contentH = Math.max(MIN_DISPLAY_H, contentH - (nodeH - MAX_NODE_H));
+                    setDisplayH(contentH);
+                    nodeH = node.computeSize ? node.computeSize([nodeW, 0])[1] : contentH + 120;
                 }
                 node.setSize([nodeW, Math.min(MAX_NODE_H, nodeH)]);
                 node.setDirtyCanvas?.(true, true);
@@ -63,7 +67,7 @@ app.registerExtension({
             // These are frontend-only controls, never backend inputs.
             font.options.serialize = false;
             size.options.serialize = false;
-            const display = node.addDOMWidget("display", "customtext", area, {serialize:false, hideOnZoom:false});
+            const display = node.addDOMWidget("display", "customtext", area, {serialize:false, hideOnZoom:false, getMinHeight:() => displayH, getMaxHeight:() => MAX_NODE_H});
             display.computeSize = width => [width, displayH];
             node.magikShowText = text => {area.value = text; apply(); fit();};
             const configured = node.onConfigure;
@@ -93,6 +97,14 @@ app.registerExtension({
                 close.onclick = () => dialog.close();
                 dialog.addEventListener("close", () => dialog.remove(), {once:true});
             });
+            const resized = node.onResize;
+            node.onResize = function (size) {
+                const result = resized?.call(this, size);
+                const chrome = node.computeSize ? node.computeSize([size[0], 0])[1] - displayH : 120;
+                setDisplayH(clamp(size[1] - chrome, contentH, MAX_NODE_H));
+                node.setDirtyCanvas?.(true, true);
+                return result;
+            };
             fit();
             return result;
         };
